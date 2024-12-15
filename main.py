@@ -1,8 +1,7 @@
-from fastapi import FastAPI
-from fastapi import Body
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-from typing import Optional
+from fastapi import FastAPI, Body, Path, Query
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field
+from typing import Optional, List
 from data_db import ventas
 
 
@@ -11,58 +10,80 @@ app = FastAPI()
 app.title = "APLICACIÓN DE VENTAS"
 app.version = "2025.1.0"
 
+
+# Creación del modelo (Para usar BaseModel y Optional)
+class VentasModel(BaseModel):
+    id: int = Field(ge=0, le=21)
+    fecha: str
+    importe: float
+    tienda: str = Field(min_length=4, max_length=10)
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "id": 1,
+                "fecha": "01/01/2001",
+                "importe": 1234.56,
+                "tienda": "Tienda9"
+            }
+        }
+    }
+
+# class VentasModel(BaseModel):
+#     id: Optional[int] = Field(None, title="Id", description="Identificador único de la venta")
+#     fecha: str = Field(..., title="Fecha", description="Fecha de la venta (YYYY-MM-DD)")
+#     importe: float = Field(..., title="Importe", description="Monto total de la venta")
+#     tienda: str = Field(..., title="Tienda", description="Nombre de la tienda")
+
+
 # Punto de entrada o endpoint
 @app.get("/", tags=['Bienvenida'])
 def mensaje():
     return HTMLResponse("<h2>Hola, bienvenido</h2>")
 
-@app.get('/ventas', tags=['Ventas'])
-def obtener_ventas():
-    return ventas
+@app.get('/ventas', tags=['Ventas'], response_model=List[VentasModel])
+def obtener_ventas() -> List[VentasModel]:
+    return JSONResponse(content=ventas)
 
 # Parámetro de ruta
-@app.get('/ventas/{id}', tags=['Ventas'])
-def obtener_venta_por_id(id: int):
+@app.get('/ventas/{id}', tags=['Ventas'], response_model= VentasModel)
+def obtener_venta_por_id(id: int = Path(ge=1, le=1000)) -> VentasModel:
     for item in ventas:
         if item['id'] == id:
-            return item
-    return []
+            return JSONResponse(content=item)
+    return JSONResponse(content=[])
 
 # Parámetro de consulta
-@app.get('/ventas/', tags=['Ventas'])
-def obtener_venta_por_tienda(tienda: str):
+@app.get('/ventas/', tags=['Ventas'], response_model=List[VentasModel])
+def obtener_venta_por_tienda(tienda: str = Query(min_length=4, max_length=20)) -> List[VentasModel]:
     consulta = [item for item in ventas if item['tienda'] == tienda]        
-    return consulta
+    return JSONResponse(content=consulta)
 
 # Otros métodos HTTP:
 # Método POST
-@app.post('/ventas', tags=['Ventas'])
-def crear_una_venta(id: int = Body(), fecha: str = Body(), tienda: str = Body(), importe: float = Body()):
+@app.post('/ventas', tags=['Ventas'], response_model=dict)
+# def crear_una_venta(id: int = Body(), fecha: str = Body(), tienda: str = Body(), importe: float = Body()):
+def crear_una_venta(venta: VentasModel) -> dict:
     ventas.append(
-        {
-            "id": id,
-            "fecha": fecha,
-            "importe": importe,
-            "tienda": tienda
-        }
+        dict(venta)
     )
-    return ventas
+    return JSONResponse(content={'Mensaje':'Venta registrada'})
 
 # Método PUT
-@app.put('/ventas/{id}', tags=['Ventas'])
-def actualizar_un_item(id: int, fecha: str = Body(), tienda: str = Body(), importe: float = Body()):
+@app.put('/ventas/{id}', tags=['Ventas'], response_model=dict)
+def actualizar_un_item(id: int, venta: VentasModel) -> dict:
     for item in ventas:
         if item['id'] == id:
-            item['fecha'] = fecha
-            item['tienda'] = tienda
-            item['importe'] = importe
-    return ventas
+            item['fecha'] = venta.fecha
+            item['tienda'] = venta.tienda
+            item['importe'] = venta.importe
+    return JSONResponse(content={'Mensaje': 'Venta actualizada'})
 
 # Método DELETE
-@app.delete('/ventas/{id}', tags=['Ventas'])
-def borrar_una_venta(id: int):
+@app.delete('/ventas/{id}', tags=['Ventas'], response_model=dict)
+def borrar_una_venta(id: int) -> dict:
     for item in ventas:
         if item['id'] == id:
             ventas.remove(item)
-    return ventas
+    return JSONResponse(content={'Mensaje': 'Venta eliminada'})
 
