@@ -1,8 +1,10 @@
-from fastapi import FastAPI, Body, Path, Query
+from fastapi import FastAPI, Body, Path, Query, Request, HTTPException, Depends
+from fastapi.security import HTTPBearer
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from data_db import ventas
+from jwt_config import generar_token, validar_token
 
 
 # Crea una instancia de FastAPI
@@ -10,6 +12,9 @@ app = FastAPI()
 app.title = "APLICACIÓN DE VENTAS"
 app.version = "2025.1.0"
 
+class UsuarioModel(BaseModel):
+    email: str
+    password: str
 
 # Creación del modelo (Para usar BaseModel y Optional)
 class VentasModel(BaseModel):
@@ -35,13 +40,18 @@ class VentasModel(BaseModel):
 #     importe: float = Field(..., title="Importe", description="Monto total de la venta")
 #     tienda: str = Field(..., title="Tienda", description="Nombre de la tienda")
 
-
+class Portador(HTTPBearer):
+    async def __call__(self, request: Request):
+        authorization = await super(). __call__(request)
+        data = validar_token(authorization.credentials)
+        if data['email'] != 'alpacazen@hotmail.com':
+            raise HTTPException(detail='No autorizado', status_code=403)
 # Punto de entrada o endpoint
 @app.get("/", tags=['Bienvenida'])
 def mensaje():
     return HTMLResponse("<h2>Hola, bienvenido</h2>")
 
-@app.get('/ventas', tags=['Ventas'], response_model=List[VentasModel])
+@app.get('/ventas', tags=['Ventas'], response_model=List[VentasModel], status_code=200, dependencies=[Depends(Portador())])
 def obtener_ventas() -> List[VentasModel]:
     return JSONResponse(content=ventas)
 
@@ -87,3 +97,15 @@ def borrar_una_venta(id: int) -> dict:
             ventas.remove(item)
     return JSONResponse(content={'Mensaje': 'Venta eliminada'})
 
+
+# Creación de la ruta para el login
+@app.post('/login', tags=['Autenticación'])
+def login(user: UsuarioModel):
+    if user.email == 'alpacazen@hotmail.com' and user.password == '1234':
+        token: str=generar_token(user.model_dump())
+        return JSONResponse(content=token, status_code=200)
+    return JSONResponse(content={"detail": "Credenciales inválidas"}, status_code=401)
+
+    
+    
+    
